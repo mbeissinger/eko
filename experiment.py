@@ -52,27 +52,38 @@ class HeartSound(Dataset):
         # shuffle!
         random.shuffle(datasets)
 
+        # shapes
+        shapes = [shape for shape, _, _ in datasets]
         # data
-        dataset = [dataset_shared(data, borrow=True) for _, data, _ in datasets]
+        dataset = [data for _, data, _ in datasets]
         # labels
         labels = numpy.asarray([label for _, _, label in datasets], dtype='int8')
         # make the labels into one-hot vectors
         if one_hot:
             labels = numpy_one_hot(labels, n_classes=5)
-        # shapes
-        shapes = (numpy.sum([shape for shape, _, _ in datasets], axis=0)[0], sizes[size_key])
-        print('Overall shape: %s' % str(shapes))
 
         train_len = int(math.floor(train_split * len(dataset)))
         print("# train: %d examples" % train_len)
-        self.train = (dataset_shared(dataset[:train_len]), dataset_shared(labels[:train_len]))
-        self.valid = (dataset_shared(dataset[train_len:]), dataset_shared(labels[train_len:]))
-        self.train_shapes = shapes[:train_len]
-        self.valid_shapes = shapes[train_len:]
+
+        train_datasets = dataset[:train_len]
+        train_labels = labels[:train_len]
+
+        valid_datasets = dataset[train_len:]
+        valid_labels = labels[train_len:]
+
+        # median_train_len = int(numpy.median(numpy.asarray(shapes[:train_len]), axis=0)[0])
+        min_train_len = int(numpy.min(numpy.asarray(shapes[:train_len]), axis=0)[0])
+        train = numpy.array([data[:min_train_len] for data in train_datasets], dtype='float32')
+        self.train_shape = train.shape
+        self.train = (dataset_shared(train, borrow=True), dataset_shared(train_labels, borrow=True))
+
+        min_valid_len = int(numpy.min(numpy.asarray(shapes[train_len:]), axis=0)[0])
+        valid = numpy.array([data[:min_valid_len] for data in valid_datasets], dtype='float32')
+        self.valid_shape = valid.shape
+        self.valid = (dataset_shared(valid, borrow=True), dataset_shared(valid_labels, borrow=True))
+
         print("Dataset %s initialized!" % size_key)
 
-        s = self.train[0]
-        print(s[0].eval())
 
     def getSubset(self, subset):
         if subset is TRAIN:
@@ -84,9 +95,9 @@ class HeartSound(Dataset):
 
     def getDataShape(self, subset):
         if subset is TRAIN:
-            return self.train_shapes
+            return self.train_shape
         elif subset is VALID:
-            return self.valid_shapes
+            return self.valid_shape
         else:
             return None
 
@@ -97,7 +108,6 @@ def main(size_key):
 
     # grab the data for this step size, window, and max frequency
     heartbeats = HeartSound(basedir, size_key, one_hot=out_vector)
-    return
 
     # define our model! we are using lstm with mean-pooling and softmax as classification
     hidden_size = 128
@@ -124,14 +134,13 @@ def main(size_key):
                                  out_as_probs=out_vector)
 
     # make it into a prototype!
-    model = Prototype(layers=[lstm_layer, softmax_layer])
-
+    model = Prototype(layers=[lstm_layer, softmax_layer], outdir='outputs/prototype%s' % size_key)
 
     # optimizer
     optimizer = RMSProp(dataset=heartbeats,
                         model=model,
-                        n_epoch=300,
-                        batch_size=1,
+                        n_epoch=200,
+                        batch_size=10,
                         save_frequency=10)
 
     # monitors
@@ -148,9 +157,8 @@ if __name__ == '__main__':
     # if we want logging
     config_root_logger()
 
-    step = 10
-    window = 20
-    max_freq = 4000
-
-    size_key = "%d_%d_%d" % (step, window, max_freq)
-    main(size_key)
+    for step in [10]:
+        for window in [20, 10]:
+            for freq in [2000, 4000, 8000]:
+                size_key = "%d_%d_%d" % (step, window, freq)
+                main(size_key)
