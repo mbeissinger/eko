@@ -2,21 +2,27 @@ import os
 import numpy
 from feature_helpers import compute_specgram
 
-audio_ext = ['.wav', '.aif']
+audio_ext = ['.wav']
+basedir = 'data/sounds/'
 
-def main(step, window, max_freq):
+def main(steps, windows, max_freqs):
+    # create the datasets!
     # go through everything in the data/sounds directory
-    for f in find_audio_files('data/sounds/'):
+    for f in find_audio_files(basedir):
         name, ext = os.path.splitext(f)
-        processed_name = name + '_processed_%d_%d_%d.npy'%(step, window, max_freq)
-        # if the current processed version doesn't exist
-        if not os.path.exists(processed_name):
-            # process the file!
-            processed, _freqs = compute_specgram(audio_file=f, step=step, window=window, max_freq=max_freq)
-            if processed is not None:
-                print f, '--->', processed_name
-                print processed.shape
-                numpy.save(processed_name, processed)
+        for max_freq in max_freqs:
+            for window in windows:
+                for step in steps:
+                    processed_name = name + '_processed_%d_%d_%d.npy'%(step, window, max_freq)
+                    # if the current processed version doesn't exist
+                    if not os.path.exists(processed_name):
+                        # process the file!
+                        processed, _freqs = compute_specgram(audio_file=f, step=step, window=window, max_freq=max_freq)
+                        if processed is not None:
+                            print f, '--->', processed_name
+                            processed = processed.transpose()
+                            print processed.shape
+                            numpy.save(processed_name, processed)
 
 def find_audio_files(directory):
     for root, dirs, files in os.walk(directory):
@@ -27,6 +33,7 @@ def find_audio_files(directory):
                 yield filename
 
 if __name__ == '__main__':
-    for freq in [2000, 4000, 8000]:
-        for window in [10, 20]:
-            main(step=10, window=window, max_freq=freq)
+    freqs = [2000, 4000, 8000]
+    windows = [10, 20]
+    steps = [10]
+    main(steps, windows, freqs)
