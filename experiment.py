@@ -39,7 +39,7 @@ def get_label(filename):
     return None
 
 class HeartSound(Dataset):
-    def __init__(self, source_dir, size_key, one_hot=False, train_split=0.9):
+    def __init__(self, source_dir, size_key, one_hot=False, train_split=0.8):
         print("Getting dataset %s" % size_key)
         # grab the datasets from the preprocessed files
         datasets = [(numpy.load(f), get_label(f)) for f in find_processed_files(source_dir, size_key)]
@@ -110,7 +110,7 @@ def main(size_key):
     heartbeats = HeartSound(basedir, size_key, one_hot=out_vector)
 
     # define our model! we are using lstm with mean-pooling and softmax as classification
-    hidden_size = 128
+    hidden_size = int(math.floor(sizes[size_key]*1.3))
     n_classes = 5
 
     lstm_layer = LSTM(input_size=sizes[size_key],
@@ -123,7 +123,7 @@ def main(size_key):
                       r_weights_init='orthogonal',
                       clip_recurrent_grads=5.,
                       noise='dropout',
-                      noise_level=0.3)
+                      noise_level=0.4)
 
     # mean of the hiddens across timesteps (reduces ndim by 1)
     mean_pooling = T.mean(lstm_layer.get_hiddens(), axis=0)
@@ -139,9 +139,13 @@ def main(size_key):
     # optimizer
     optimizer = RMSProp(dataset=heartbeats,
                         model=model,
-                        n_epoch=200,
-                        batch_size=10,
-                        save_frequency=10)
+                        n_epoch=300,
+                        batch_size=5,
+                        save_frequency=10,
+                        learning_rate=8e-5, #1e-6
+                        grad_clip=5.,
+                        hard_clip=False
+                        )
 
     # monitors
     errors = Monitor(name='error', expression=model.get_monitors()['softmax_error'], train=True, valid=True)
@@ -158,7 +162,7 @@ if __name__ == '__main__':
     config_root_logger()
 
     for step in [10]:
-        for window in [20, 10]:
-            for freq in [2000, 4000, 8000]:
+        for freq in [2000, 4000, 8000]:
+            for window in [20, 10]:
                 size_key = "%d_%d_%d" % (step, window, freq)
                 main(size_key)
